@@ -1,0 +1,49 @@
+/* The config.json file is where you specify additional configuration needed by
+ * your plugin. The details you specify here will be translated to a form on the
+ * UI. The values supplied by the users will then get injected as options on the
+ * platform on ready event.
+ */
+{
+  "host": {
+	"label": "Host",
+	"type": "String",
+	"required": true,
+	"help": "Host(s) for the Cassandra database. Values can be multiple separated by comma."
+  },
+  "port": {
+	"label": "Port",
+	"type": "Number",
+	"required": false,
+	"help": "(Optional) Port for the Cassandra database."
+  },
+  "user" : {
+	"label": "User",
+	"type": "String",
+	"required": true,
+	"help": "User for authentication."
+  },
+  "password" : {
+	"label": "Password",
+	"type": "String",
+	"required": false,
+	"help": "(Optional) Password for authentication."
+  },
+  "keyspace": {
+	"label": "Keyspace",
+	"type": "String",
+	"required": true,
+	"help": "Name of the Keyspace where the Table is located in Cassandra."
+  },
+  "table": {
+	"label": "Table",
+	"type": "String",
+	"required": true,
+	"help": "Name of the Table in the Cassandra Keyspace specified and data will be written into."
+  },
+  "fields": {
+	"label": "Fields",
+	"type": "JSON",
+	"required": true,
+	"help": "Data will be inserted as is if this is blank. List of the Table Fields/Columns. Input for this field is in JSON format {\"(field_name)\" : {\"source_field\" : \"value\", \"data_type\": \"value\", \"format\": \"value\"}}. field_name will be the name of the column in the MySQL Table, source_field (required) value will be the name of the field in the JSON Data passed to the plugin, data_type (optional) there are 6 available data types that will convert data to it's proper type before saving we have String, Integer, Float, Boolean, DateTime and JSON leaving this blank will just use the current data for the field, format is only available for DateTime data_type this will allow users to format the date/time before saving i.e. (YYYY-MM-DD HH:mm:ss) kindly refer to the moment node module for more details."
+  }
+}
