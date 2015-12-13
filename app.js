@@ -154,8 +154,9 @@ platform.on('close', function () {
 	});
 
 	d.run(function () {
-		// TODO: Release all resources and close connections etc.
-		platform.notifyClose(); // Notify the platform that resources have been released.
+		client.shutdown(function () {
+			platform.notifyClose();
+		});
 	});
 });
 
