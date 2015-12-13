@@ -1,11 +1,9 @@
 'use strict';
 
 var platform      = require('./platform'),
-	cassandra 	  = require('cassandra-driver'),
-	async 		  = require('async'),
+	async         = require('async'),
 	isPlainObject = require('lodash.isplainobject'),
-	isEmpty 	  = require('lodash.isempty'),
-	moment  	  = require('moment'),
+	moment        = require('moment'),
 	parseFields, client, tableName;
 
 /*
@@ -16,9 +14,9 @@ platform.on('data', function (data) {
 	var columnList,
 		valueList,
 		valueRef = {},
-		first = true;
+		first    = true;
 
-	async.forEachOf(parseFields, function(field, key, callback) {
+	async.forEachOf(parseFields, function (field, key, callback) {
 
 		var datum = data[field.source_field],
 			processedDatum;
@@ -32,7 +30,7 @@ platform.on('data', function (data) {
 						else
 							processedDatum = String(datum);
 
-					} else if (field.data_type === 'Integer')  {
+					} else if (field.data_type === 'Integer') {
 
 						var intData = parseInt(datum);
 
@@ -41,7 +39,7 @@ platform.on('data', function (data) {
 						else
 							processedDatum = intData;
 
-					} else if (field.data_type === 'Float')  {
+					} else if (field.data_type === 'Float') {
 
 						var floatData = parseFloat(datum);
 
@@ -66,7 +64,7 @@ platform.on('data', function (data) {
 					} else if (field.data_type === 'DateTime') {
 
 						var dtm = new Date(datum);
-						if (!isNaN( dtm.getTime())) {
+						if (!isNaN(dtm.getTime())) {
 
 							if (field.format !== undefined)
 								processedDatum = moment(dtm).format(field.format);
@@ -87,7 +85,7 @@ platform.on('data', function (data) {
 
 							console.log('in try');
 						}
-						catch(e) {
+						catch (e) {
 							processedDatum = datum;
 						}
 					}
@@ -97,7 +95,7 @@ platform.on('data', function (data) {
 					else if (isPlainObject(datum))
 						processedDatum = JSON.stringify(datum);
 					else
-						processedDatum = datum ;
+						processedDatum = datum;
 				}
 
 			} else {
@@ -106,7 +104,7 @@ platform.on('data', function (data) {
 				else if (isPlainObject(datum))
 					processedDatum = JSON.stringify(datum);
 				else
-					processedDatum = datum ;
+					processedDatum = datum;
 			}
 
 		} else {
@@ -116,26 +114,26 @@ platform.on('data', function (data) {
 		valueRef[key] = processedDatum;
 
 		if (!first) {
-			valueList  = valueList  + ',:' + key;
-			columnList = columnList  + ',' + key;
+			valueList = valueList + ',:' + key;
+			columnList = columnList + ',' + key;
 		} else {
-			first      = false;
-			valueList  = ':' + key;
+			first = false;
+			valueList = ':' + key;
 			columnList = key;
 		}
 
 		callback();
 
-	}, function() {
-		client.execute( 'insert into ' + tableName + ' (' + columnList + ') values (' + valueList + ')', valueRef, {prepare: true}, function(reqErr, queryset) {
+	}, function () {
+		client.execute('insert into ' + tableName + ' (' + columnList + ') values (' + valueList + ')', valueRef, {prepare: true}, function (reqErr, queryset) {
 			if (reqErr) {
-			    console.error('Error creating record on Cassandra', reqErr);
-			    platform.handleException(reqErr);
+				console.error('Error creating record on Cassandra', reqErr);
+				platform.handleException(reqErr);
 			} else {
-			    platform.log(JSON.stringify({
-			        title: 'Record Successfully inserted to Cassandra.',
-			        data: valueRef
-			    }));
+				platform.log(JSON.stringify({
+					title: 'Record Successfully inserted to Cassandra.',
+					data: valueRef
+				}));
 			}
 		});
 	});
@@ -149,13 +147,13 @@ platform.on('close', function () {
 	var domain = require('domain');
 	var d = domain.create();
 
-	d.on('error', function(error) {
+	d.on('error', function (error) {
 		console.error(error);
 		platform.handleException(error);
 		platform.notifyClose();
 	});
 
-	d.run(function() {
+	d.run(function () {
 		// TODO: Release all resources and close connections etc.
 		platform.notifyClose(); // Notify the platform that resources have been released.
 	});
@@ -165,11 +163,28 @@ platform.on('close', function () {
  * Listen for the ready event.
  */
 platform.once('ready', function (options) {
+	var isEmpty   = require('lodash.isempty'),
+		cassandra = require('cassandra-driver');
 
-	var init = function(e){
+	try {
+		parseFields = JSON.parse(options.fields);
+	}
+	catch (ex) {
+		platform.handleException(new Error('Invalid option parameter: fields. Must be a valid JSON String.'));
+
+		return setTimeout(function () {
+			process.exit(1);
+		}, 2000);
+	}
+
+	var init = function (e) {
 		if (e) {
 			console.error('Error parsing JSON field configuration for Cassandra Plugin.', e);
-			return platform.handleException(e);
+			platform.handleException(e);
+
+			return setTimeout(function () {
+				process.exit(1);
+			}, 2000);
 		}
 
 		var hostList = options.host.split(',');
@@ -188,7 +203,7 @@ platform.once('ready', function (options) {
 
 		if (options.port) client.protocolOptions = {port: options.port};
 		tableName = options.table;
-		client.connect(function(err) {
+		client.connect(function (err) {
 
 			if (err) {
 				console.error('Error connecting in Cassandra.', err);
@@ -201,22 +216,17 @@ platform.once('ready', function (options) {
 		});
 	};
 
-
-	parseFields =  JSON.parse(options.fields);
-
-	async.forEachOf(parseFields, function(field, key, callback) {
-		if (isEmpty(field.source_field)){
-			callback( new Error('Source field is missing for ' + key + ' in Cassandra Plugin'));
-		} else if (field.data_type  && (field.data_type !== 'String' && field.data_type !== 'Integer' &&
-			field.data_type !== 'Float'  && field.data_type !== 'Boolean' &&
+	async.forEachOf(parseFields, function (field, key, callback) {
+		if (isEmpty(field.source_field)) {
+			callback(new Error('Source field is missing for ' + key + ' in Cassandra Plugin'));
+		} else if (field.data_type && (field.data_type !== 'String' && field.data_type !== 'Integer' &&
+			field.data_type !== 'Float' && field.data_type !== 'Boolean' &&
 			field.data_type !== 'DateTime' && field.data_type !== 'JSON')) {
 			callback(new Error('Invalid Data Type for ' + key + ' allowed data types are (String, Integer, Float, Boolean, DateTime, JSON) in Cassandra Plugin'));
 		} else
 			callback();
 
 	}, init);
-
-
 
 
 });
