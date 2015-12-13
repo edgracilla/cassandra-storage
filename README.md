@@ -1,5 +1,10 @@
 # Cassandra Storage Plugin
 
+[![Build Status](https://travis-ci.org/Reekoh/cassandra-storage.svg)](https://travis-ci.org/Reekoh/cassandra-storage)
+![Dependencies](https://img.shields.io/david/Reekoh/cassandra-storage.svg)
+![Dependencies](https://img.shields.io/david/dev/Reekoh/cassandra-storage.svg)
+![Built With](https://img.shields.io/badge/built%20with-gulp-red.svg)
+
 Cassandra Storage Plugin for the Reekoh IoT Platform.
 
 Uses cassandra-driver npm library
@@ -33,10 +38,10 @@ Uses cassandra-driver npm library
 6. JSON data type would only accept JSON String as an input to be parsed otherwise if it's already a JSON object no
    need to enter data type
 
-##Sample Config
+## Sample Config
 
 Field Configuration:
-```
+```javascript
 {
     co2_field      	 : {source_field:'co2', data_type: 'String'},
     temp_field     	 : {source_field:'temp', data_type: 'Integer'},
@@ -49,7 +54,7 @@ Field Configuration:
 ```
 
 Sample Data:
-```
+```javascript
 {
   _id: _id,
   co2: '11%',
