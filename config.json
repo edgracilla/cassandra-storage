@@ -19,7 +19,7 @@
   },
   "password" : {
 	"label": "Password",
-	"type": "Password",
+	"type": "String",
 	"required": false,
 	"help": "(Optional) Password for authentication."
   },
