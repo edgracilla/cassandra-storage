@@ -6,7 +6,7 @@ var cp     = require('child_process'),
 	moment = require('moment'),
 	storage;
 
-var HOST     = 'ec2-52-90-117-240.compute-1.amazonaws.com',
+var HOST     = 'ec2-52-90-186-4.compute-1.amazonaws.com',
 	USER     = 'reekoh',
 	PASSWORD = 'rozzwalla',
 	PORT     = 9042,
