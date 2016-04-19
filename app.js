@@ -10,14 +10,12 @@ var platform      = require('./platform'),
  * Listen for the data event.
  */
 platform.on('data', function (data) {
-
 	var columnList,
 		valueList,
 		valueRef = {},
 		first    = true;
 
-	async.forEachOf(parseFields, function (field, key, callback) {
-
+	async.forEachOf(parseFields, (field, key, callback) => {
 		var datum = data[field.source_field],
 			processedDatum;
 
@@ -124,7 +122,7 @@ platform.on('data', function (data) {
 
 		callback();
 
-	}, function () {
+	}, () => {
 		client.execute('insert into ' + tableName + ' (' + columnList + ') values (' + valueList + ')', valueRef, {prepare: true}, function (reqErr, queryset) {
 			if (reqErr) {
 				console.error('Error creating record on Cassandra', reqErr);
@@ -144,8 +142,7 @@ platform.on('data', function (data) {
  * Event to listen to in order to gracefully release all resources bound to this service.
  */
 platform.on('close', function () {
-	var domain = require('domain');
-	var d = domain.create();
+	var d = require('domain').create();
 
 	d.on('error', function (error) {
 		console.error(error);
@@ -154,8 +151,9 @@ platform.on('close', function () {
 	});
 
 	d.run(function () {
-		// TODO: Release all resources and close connections etc.
-		platform.notifyClose(); // Notify the platform that resources have been released.
+		client.shutdown(function () {
+			platform.notifyClose();
+		});
 	});
 });
 
@@ -166,67 +164,66 @@ platform.once('ready', function (options) {
 	var isEmpty   = require('lodash.isempty'),
 		cassandra = require('cassandra-driver');
 
-	try {
-		parseFields = JSON.parse(options.fields);
-	}
-	catch (ex) {
-		platform.handleException(new Error('Invalid option parameter: fields. Must be a valid JSON String.'));
+	async.waterfall([
+		async.constant(options.fields || {}),
+		async.asyncify(JSON.parse)
+	], (parseError, parseFields) => {
+		if (parseError) {
+			platform.handleException(new Error('Invalid option parameter: fields. Must be a valid JSON String.'));
 
-		return setTimeout(function () {
-			process.exit(1);
-		}, 2000);
-	}
-
-	var init = function (e) {
-		if (e) {
-			console.error('Error parsing JSON field configuration for Cassandra Plugin.', e);
-			platform.handleException(e);
-
-			return setTimeout(function () {
+			return setTimeout(() => {
 				process.exit(1);
 			}, 2000);
 		}
 
-		var hostList = options.host.split(',');
+		async.forEachOf(parseFields, (field, key, callback) => {
+			if (isEmpty(field.source_field))
+				callback(new Error('Source field is missing for ' + key + ' in field mapping.'));
+			else if (field.data_type && (field.data_type !== 'String' && field.data_type !== 'Integer' &&
+				field.data_type !== 'Float' && field.data_type !== 'Boolean' &&
+				field.data_type !== 'DateTime' && field.data_type !== 'JSON')) {
 
-		for (var i = 0; i < hostList.length; i++) {
-			hostList[i] = hostList[i].trim();
-		}
-
-		var authProvider = new cassandra.auth.PlainTextAuthProvider(options.user, options.password);
-
-		client = new cassandra.Client({
-			contactPoints: hostList,
-			authProvider: authProvider,
-			keyspace: options.keyspace
-		});
-
-		if (options.port) client.protocolOptions = {port: options.port};
-		tableName = options.table;
-		client.connect(function (err) {
-
-			if (err) {
-				console.error('Error connecting in Cassandra.', err);
-				platform.handleException(err);
-
-			} else {
-				platform.log('Cassandra Storage plugin ready.');
-				platform.notifyReady();
+				callback(new Error('Invalid Data Type for ' + key + ' allowed data types are (String, Integer, Float, Boolean, DateTime, JSON).'));
 			}
+			else
+				callback();
+
+		}, (error) => {
+			if (error) {
+				console.error('Error parsing JSON field mapping.', error);
+				platform.handleException(error);
+
+				return setTimeout(() => {
+					process.exit(1);
+				}, 2000);
+			}
+
+			var host = `${options.host}`.replace(/\s/g, '').split(',');
+			var authProvider = new cassandra.auth.PlainTextAuthProvider(options.user, options.password);
+
+			client = new cassandra.Client({
+				contactPoints: host,
+				authProvider: authProvider,
+				keyspace: options.keyspace
+			});
+
+			if (options.port) client.protocolOptions = {port: options.port};
+
+			tableName = options.table;
+
+			client.connect((connectionError) => {
+				if (connectionError) {
+					console.error('Error connecting in Cassandra.', connectionError);
+					platform.handleException(connectionError);
+
+					return setTimeout(() => {
+						process.exit(1);
+					}, 2000);
+				} else {
+					platform.log('Cassandra Storage plugin ready.');
+					platform.notifyReady();
+				}
+			});
 		});
-	};
-
-	async.forEachOf(parseFields, function (field, key, callback) {
-		if (isEmpty(field.source_field)) {
-			callback(new Error('Source field is missing for ' + key + ' in Cassandra Plugin'));
-		} else if (field.data_type && (field.data_type !== 'String' && field.data_type !== 'Integer' &&
-			field.data_type !== 'Float' && field.data_type !== 'Boolean' &&
-			field.data_type !== 'DateTime' && field.data_type !== 'JSON')) {
-			callback(new Error('Invalid Data Type for ' + key + ' allowed data types are (String, Integer, Float, Boolean, DateTime, JSON) in Cassandra Plugin'));
-		} else
-			callback();
-
-	}, init);
-
-
+	});
 });
