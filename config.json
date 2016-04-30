@@ -35,10 +35,10 @@
 	"required": true,
 	"help": "Name of the Table in the Cassandra Keyspace specified and data will be written into."
   },
-  "fields": {
-	"label": "Fields",
+  "field_mapping": {
+	"label": "Field Mapping",
 	"type": "JSON",
 	"required": true,
-	"help": "Data will be inserted as is if this is blank. List of the Table Fields/Columns. Input for this field is in JSON format {\"(field_name)\" : {\"source_field\" : \"value\", \"data_type\": \"value\", \"format\": \"value\"}}. field_name will be the name of the column in the MySQL Table, source_field (required) value will be the name of the field in the JSON Data passed to the plugin, data_type (optional) there are 6 available data types that will convert data to it's proper type before saving we have String, Integer, Float, Boolean, DateTime and JSON leaving this blank will just use the current data for the field, format is only available for DateTime data_type this will allow users to format the date/time before saving i.e. (YYYY-MM-DD HH:mm:ss) kindly refer to the moment node module for more details."
+	"help": "Data will be inserted as is if this is blank. List of the Table Fields/Columns. Input for this field is in JSON format {\"(field_name)\" : {\"source_field\" : \"value\", \"data_type\": \"value\", \"format\": \"value\"}}. field_name will be the name of the column in the Cassandra Table, source_field (required) value will be the name of the field in the JSON Data passed to the plugin, data_type (optional) there are 6 available data types that will convert data to it's proper type before saving. Valid data types are String, Integer, Float, Boolean, Timestamp, Map and Set leaving this blank will just use the current data for the field, format is only available for Timestamp data type allowing users to specify the format of the device date/time data value. Kindly refer to the MomentJS docs for more details (http://momentjs.com/docs/#/parsing/string-format/)."
   }
 }
