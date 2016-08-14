@@ -2,135 +2,132 @@
 
 var platform      = require('./platform'),
 	async         = require('async'),
-	isNil         = require('lodash.isnil'),
 	moment        = require('moment'),
+	isNil         = require('lodash.isnil'),
 	isEmpty       = require('lodash.isempty'),
 	isArray       = require('lodash.isarray'),
 	isNumber      = require('lodash.isnumber'),
+	contains      = require('lodash.contains'),
 	isString      = require('lodash.isstring'),
-	isBoolean     = require('lodash.isboolean'),
 	isPlainObject = require('lodash.isplainobject'),
-	fieldMapping, client, tableName;
+	cassandra, schema, Data;
 
-let insertData = function (data, callback) {
-	let query = `insert into ${tableName} (${data.columns.join(', ')}) values (${data.values.join(', ')})`;
+let insertData = function (processedData, callback) {
+	var data = new Data(processedData);
 
-	client.execute(query, data.data, {prepare: true}, (insertError) => {
-		callback(insertError);
-	});
+	data.save(callback);
 };
 
 let processData = function (data, callback) {
-	let keyCount      = 0,
-		processedData = {
-			columns: [],
-			values: [],
-			data: {}
-		};
+	let fields        = schema.fields,
+		processedData = {};
 
-	async.forEachOf(fieldMapping, (field, key, done) => {
-		keyCount++;
+	async.forEachOf(fields, (field, key, done) => {
+		try {
+			let dataType = '';
 
-		processedData.columns.push(`"${key}"`);
-		processedData.values.push(`:val${keyCount}`);
+			if (isString(fields[key]))
+				dataType = `${fields[key]}`.toLowerCase();
+			else if (isPlainObject(fields[key]) && fields[key].type)
+				dataType = `${fields[key].type}`.toLowerCase();
 
-		let datum = data[field.source_field],
-			processedDatum;
+			// bigint
+			if (!isNil(fields[key]) && (dataType === 'bigint' || dataType === 'bigint') && !isNil(data[key]))
+				processedData[key] = cassandra.datatypes.Long.fromString(`${data[key]}`);
 
-		if (!isNil(datum) && !isEmpty(field.data_type)) {
-			try {
-				if (field.data_type === 'String') {
-					if (isPlainObject(datum))
-						processedDatum = JSON.stringify(datum);
-					else
-						processedDatum = `${datum}`;
-				}
-				else if (field.data_type === 'Integer') {
-					if (isNumber(datum))
-						processedDatum = datum;
-					else {
-						let intData = parseInt(datum);
+			// blob
+			else if (!isNil(fields[key]) && (dataType === 'blob' || dataType === 'blob') && Buffer.isBuffer(data[key]))
+				processedData[key] = data[key];
+			else if (!isNil(fields[key]) && (dataType === 'blob' || dataType === 'blob') && !isNil(data[key]))
+				processedData[key] = new Buffer(`${data[key]}`, 'base64');
 
-						if (isNaN(intData))
-							processedDatum = datum; //store original value
-						else
-							processedDatum = intData;
-					}
-				}
-				else if (field.data_type === 'Float') {
-					if (isNumber(datum))
-						processedDatum = datum;
-					else {
-						let floatData = parseFloat(datum);
+			// boolean
+			else if (!isNil(fields[key]) && (dataType === 'boolean' || dataType === 'boolean'))
+				processedData[key] = (data[key] || !isNil(data[key])) ? true : false;
 
-						if (isNaN(floatData))
-							processedDatum = datum; //store original value
-						else
-							processedDatum = floatData;
-					}
-				}
-				else if (field.data_type === 'Boolean') {
-					if (isBoolean(datum))
-						processedDatum = datum;
-					else {
-						if ((isString(datum) && datum.toLowerCase() === 'true') || (isNumber(datum) && datum === 1))
-							processedDatum = true;
-						else if ((isString(datum) && datum.toLowerCase() === 'false') || (isNumber(datum) && datum === 0))
-							processedDatum = false;
-						else
-							processedDatum = (datum) ? true : false;
-					}
-				}
-				else if (field.data_type === 'Timestamp') {
-					if (isEmpty(field.format) && moment(datum).isValid())
-						processedDatum = moment(datum).toDate();
-					else if (!isEmpty(field.format) && moment(datum, field.format).isValid())
-						processedDatum = moment(datum, field.format).toDate();
-					else if (!isEmpty(field.format) && moment(datum).isValid())
-						processedDatum = moment(datum).toDate();
-					else
-						processedDatum = datum;
-				} else if (field.data_type === 'Map') {
-					try {
-						if (isPlainObject(datum))
-							processedDatum = datum;
-						else
-							processedDatum = JSON.parse(datum);
-					}
-					catch (e) {
-						processedDatum = datum;
-					}
-				} else if (field.data_type === 'Set') {
-					try {
-						if (isArray(datum))
-							processedDatum = datum;
-						else
-							processedDatum = JSON.parse(datum);
-					}
-					catch (e) {
-						processedDatum = datum;
-					}
-				}
-			}
-			catch (e) {
-				if (isPlainObject(datum))
-					processedDatum = JSON.stringify(datum);
-				else
-					processedDatum = datum;
-			}
-		}
-		else if (!isNil(datum) && isEmpty(field.data_type)) {
-			if (isPlainObject(datum))
-				processedDatum = JSON.stringify(datum);
+			// counter
+			else if (!isNil(fields[key]) && (dataType === 'counter' || dataType === 'counter') && !isNil(data[key]))
+				processedData[key] = cassandra.datatypes.Long.fromString(`${data[key]}`);
+
+			// date
+			else if (!isNil(fields[key]) && (dataType === 'date' || dataType === 'date') && Buffer.isBuffer(data[key]))
+				processedData[key] = cassandra.datatypes.LocalDate.fromBuffer(moment(`${data[key]}`).toDate());
+			else if (!isNil(fields[key]) && (dataType === 'date' || dataType === 'date') && !isNil(data[key]) && moment(`${data[key]}`).isValid())
+				processedData[key] = cassandra.datatypes.LocalDate.fromDate(moment(`${data[key]}`).toDate());
+			else if (!isNil(fields[key]) && (dataType === 'date' || dataType === 'date') && !isNil(data[key]))
+				processedData[key] = cassandra.datatypes.LocalDate.fromString(`${data[key]}`);
+
+			// decimal
+			else if (!isNil(fields[key]) && (dataType === 'decimal' || dataType === 'decimal') && !isNil(data[key]))
+				processedData[key] = cassandra.datatypes.BigDecimal.fromString(`${data[key]}`);
+
+			// double, float, int, smallint, tinyint
+			else if (!isNil(fields[key]) && (contains(['double', 'float', 'int', 'smallint', 'tinyint'], dataType) || contains(['double', 'float', 'int', 'smallint', 'tinyint'], dataType)) && !isNil(data[key]))
+				processedData[key] = Number(`${data[key]}`);
+
+			//inet
+			else if (!isNil(fields[key]) && (dataType === 'inet' || dataType === 'inet') && Buffer.isBuffer(data[key]))
+				processedData[key] = new cassandra.datatypes.InetAddress(data[key]);
+			else if (!isNil(fields[key]) && (dataType === 'inet' || dataType === 'inet') && !isNil(data[key]))
+				processedData[key] = cassandra.datatypes.InetAddress.fromString(`${data[key]}`);
+
+			// list, set
+			else if (!isNil(fields[key]) && (contains(['list', 'set'], dataType) || contains(['list', 'set'], dataType)) && isArray(data[key]))
+				processedData[key] = data[key];
+			else if (!isNil(fields[key]) && (contains(['list', 'set'], dataType) || contains(['list', 'set'], dataType)) && !isNil(data[key]))
+				processedData[key] = JSON.parse(`${data[key]}`);
+
+			// map
+			else if (!isNil(fields[key]) && (dataType === 'map' || dataType === 'map') && isPlainObject(data[key]))
+				processedData[key] = data[key];
+			else if (!isNil(fields[key]) && (dataType === 'map' || dataType === 'map') && !isNil(data[key]))
+				processedData[key] = JSON.parse(`${data[key]}`);
+
+			// time
+			else if (!isNil(fields[key]) && (dataType === 'time' || dataType === 'time') && Buffer.isBuffer(data[key]))
+				processedData[key] = cassandra.datatypes.LocalTime.fromBuffer(moment(`${data[key]}`).toDate());
+			else if (!isNil(fields[key]) && (dataType === 'time' || dataType === 'time') && isNumber(data[key]))
+				processedData[key] = cassandra.datatypes.LocalTime.fromMilliseconds(data[key]);
+			else if (!isNil(fields[key]) && (dataType === 'time' || dataType === 'time') && !isNil(data[key]) && moment(`${data[key]}`).isValid())
+				processedData[key] = cassandra.datatypes.LocalTime.fromDate(moment(`${data[key]}`).toDate());
+			else if (!isNil(fields[key]) && (dataType === 'time' || dataType === 'time') && !isNil(data[key]))
+				processedData[key] = cassandra.datatypes.LocalTime.fromString(`${data[key]}`);
+
+			// timestamp
+			else if (!isNil(fields[key]) && (dataType === 'timestamp' || dataType === 'timestamp') && !isNil(data[key]) && moment(`${data[key]}`).isValid())
+				processedData[key] = moment(`${data[key]}`).toDate();
+
+			// timeuuid
+			else if (!isNil(fields[key]) && (dataType === 'timeuuid' || dataType === 'timeuuid') && !isNil(data[key]) && moment(`${data[key]}`).isValid())
+				processedData[key] = cassandra.datatypes.TimeUuid.fromDate(moment(`${data[key]}`).toDate());
+			else if (!isNil(fields[key]) && (dataType === 'timeuuid' || dataType === 'timeuuid') && !isNil(data[key]))
+				processedData[key] = cassandra.datatypes.TimeUuid.fromString(`${data[key]}`);
+
+			// tuple
+			else if (!isNil(fields[key]) && (dataType === 'tuple' || dataType === 'tuple') && isArray(data[key]))
+				processedData[key] = cassandra.datatypes.Tuple.fromArray(data[key]);
+
+			// uuid
+			else if (!isNil(fields[key]) && (dataType === 'uuid' || dataType === 'uuid') && Buffer.isBuffer(data[key]))
+				processedData[key] = new cassandra.datatypes.Uuid(data[key]);
+			else if (!isNil(fields[key]) && (dataType === 'uuid' || dataType === 'uuid') && !isNil(data[key]))
+				processedData[key] = cassandra.datatypes.Uuid.fromString(`${data[key]}`);
+
+			// varint
+			else if (!isNil(fields[key]) && (dataType === 'varint' || dataType === 'varint') && Buffer.isBuffer(data[key]))
+				processedData[key] = cassandra.datatypes.Integer.fromBuffer(moment(`${data[key]}`).toDate());
+			else if (!isNil(fields[key]) && (dataType === 'varint' || dataType === 'varint') && !isNil(data[key]))
+				processedData[key] = cassandra.datatypes.Integer.fromString(`${data[key]}`);
+
+			// ascii, text, varchar and others
 			else
-				processedDatum = `${datum}`;
+				processedData[key] = (!isNil(data[key])) ? `${data[key]}` : undefined;
+
+			done();
 		}
-		else
-			processedDatum = null;
-
-		processedData.data[`val${keyCount}`] = processedDatum;
-
-		done();
+		catch (ex) {
+			done();
+		}
 	}, () => {
 		callback(null, processedData);
 	});
@@ -143,7 +140,7 @@ platform.on('data', function (data) {
 				if (!error) {
 					platform.log(JSON.stringify({
 						title: 'Record Successfully inserted to Cassandra Database.',
-						data: data
+						data: processedData
 					}));
 				}
 				else
@@ -158,7 +155,7 @@ platform.on('data', function (data) {
 					if (!error) {
 						platform.log(JSON.stringify({
 							title: 'Record Successfully inserted to Cassandra Database.',
-							data: datum
+							data: processedData
 						}));
 					}
 					else
@@ -178,15 +175,14 @@ platform.on('close', function () {
 	var d = require('domain').create();
 
 	d.on('error', function (error) {
-		console.error(error);
 		platform.handleException(error);
 		platform.notifyClose();
 	});
 
 	d.run(function () {
-		client.shutdown(function () {
-			platform.notifyClose();
-		});
+		/*cassandra.close(function () {
+		 platform.notifyClose();
+		 });*/
 	});
 });
 
@@ -194,64 +190,83 @@ platform.on('close', function () {
  * Listen for the ready event.
  */
 platform.once('ready', function (options) {
-	var isEmpty   = require('lodash.isempty'),
-		cassandra = require('cassandra-driver');
-
-	tableName = options.table;
-
 	async.waterfall([
-		async.constant(options.field_mapping || '{}'),
-		async.asyncify(JSON.parse),
-		(obj, done) => {
-			fieldMapping = obj;
-			done();
-		}
-	], (parseError) => {
-		if (parseError) {
-			platform.handleException(new Error('Invalid field mapping. Must be a valid JSON String.'));
+		async.constant(options.schema || '{}'),
+		async.asyncify(JSON.parse)
+	], (parseError, schemaObj) => {
+		if (parseError || isEmpty(schemaObj)) {
+			platform.handleException(new Error(`Invalid schema provided. Schema must be a valid JSON String that adheres to the Express Cassandra Schema (http://express-cassandra.readthedocs.io/en/latest/schema/).`));
 
 			return setTimeout(() => {
 				process.exit(1);
 			}, 5000);
 		}
 
-		async.forEachOf(fieldMapping, (field, key, done) => {
-			if (isEmpty(field.source_field))
-				done(new Error(`Source field is missing for ${key} in field mapping.`));
-			else if (field.data_type && (field.data_type !== 'String' && field.data_type !== 'Integer' &&
-				field.data_type !== 'Float' && field.data_type !== 'Boolean' &&
-				field.data_type !== 'Timestamp' && field.data_type !== 'Map' && field.data_type !== 'Set')) {
+		schema = schemaObj;
 
-				done(new Error(`Invalid Data Type for ${key}. Allowed data types are String, Integer, Float, Boolean, Timestamp, Map and Set.`));
+		let host = `${options.host}`.replace(/\s/g, '').split(',');
+
+		let clientOptions = {
+			contactPoints: host,
+			keyspace: options.keyspace,
+			protocolOptions: {
+				port: options.port || 9042
 			}
-			else
-				done();
+		};
 
-		}, (fieldMapError) => {
-			if (fieldMapError) {
-				console.error('Error parsing JSON field mapping.', fieldMapError);
-				platform.handleException(fieldMapError);
+		let ormOptions = {
+			defaultReplicationStrategy: {
+				class: 'SimpleStrategy',
+				replication_factor: 1
+			},
+			migration: 'safe',
+			createKeyspace: true
+		};
+
+		if (!isEmpty(options.replication_config)) {
+			try {
+				ormOptions.defaultReplicationStrategy = Object.assign({
+					class: 'NetworkTopologyStrategy'
+				}, JSON.parse(options.replication_config));
+			}
+			catch (ex) {
+				platform.handleException(new Error(`Invalid replication config provided. Replication config must be a valid JSON String.`));
+
+				return setTimeout(() => {
+					process.exit(1);
+				}, 5000);
+			}
+		}
+		else if (!isNil(options.replication_factor))
+			ormOptions.defaultReplicationStrategy.replication_factor = parseInt(options.replication_factor);
+
+		if (options.port)
+			clientOptions.protocolOptions = {port: options.port};
+
+		var Cassandra = require('express-cassandra');
+
+		cassandra = Cassandra.createClient({
+			clientOptions: Object.assign(clientOptions, {
+				authProvider: (!isEmpty(options.user) || !isEmpty(options.password)) ? new Cassandra.driver.auth.PlainTextAuthProvider(options.user, options.password) : undefined,
+				queryOptions: {
+					consistency: Cassandra.consistencies.one
+				}
+			}),
+			ormOptions: ormOptions
+		});
+
+		cassandra.connect(function (connectionError) {
+			if (connectionError) {
+				platform.handleException(connectionError);
 
 				return setTimeout(() => {
 					process.exit(1);
 				}, 5000);
 			}
 
-			var host = `${options.host}`.replace(/\s/g, '').split(',');
-			var authProvider = new cassandra.auth.PlainTextAuthProvider(options.user, options.password);
-
-			client = new cassandra.Client({
-				contactPoints: host,
-				authProvider: authProvider,
-				keyspace: options.keyspace
-			});
-
-			if (options.port) client.protocolOptions = {port: options.port};
-
-			client.connect((connectionError) => {
-				if (connectionError) {
-					console.error('Error connecting in Cassandra.', connectionError);
-					platform.handleException(connectionError);
+			Data = cassandra.loadSchema('Data', schemaObj, function (modelError) {
+				if (modelError) {
+					platform.handleException(modelError);
 
 					setTimeout(() => {
 						process.exit(1);
