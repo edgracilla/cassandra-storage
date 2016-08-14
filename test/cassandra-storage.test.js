@@ -1,26 +1,72 @@
 'use strict';
 
 var cp     = require('child_process'),
-	assert = require('assert'),
+	uuid   = require('node-uuid'),
 	should = require('should'),
 	moment = require('moment'),
 	storage;
 
-var HOST     = 'ec2-52-90-186-4.compute-1.amazonaws.com',
-	USER     = 'reekoh',
-	PASSWORD = 'rozzwalla',
+var HOST     = '52.207.97.35, 52.4.146.35, 52.23.116.133',
+	USER     = 'iccassandra',
+	PASSWORD = 'f312e8989361c1cdd4f04562d53742ea',
 	PORT     = 9042,
-	KEYSPACE = 'reekoh',
-	TABLE    = 'reekoh_table',
-	ID       = new Date().getTime();
+	KEYSPACE = 'rkhcassandra',
+	ID       = Date.now();
 
-var record = {
-	id: ID,
+const REPLICATION_CONFIG = {
+	AWS_VPC_US_EAST_1: 3
+};
+
+const SCHEMA = {
+	fields: {
+		id: {
+			type: 'uuid',
+			default: {'$db_function': 'uuid()'}
+		},
+		data_id: {
+			type: 'bigint'
+		},
+		co2: {type: 'text'},
+		temp: 'int',
+		quality: 'float',
+		reading_time: 'timestamp',
+		metadata: {
+			type: 'map',
+			typeDef: '<varchar, text>'
+		},
+		list: {
+			type: 'list',
+			typeDef: '<varchar>'
+		},
+		set: {
+			type: 'set',
+			typeDef: '<varchar>'
+		},
+		random_data: 'varchar',
+		is_normal: 'boolean',
+		created: {
+			type: 'timestamp',
+			default: {
+				'$db_function': 'toTimestamp(now())'
+			}
+		}
+	},
+	key: [['id'], 'created'],
+	clustering_order: {'created': 'desc'},
+	table_name: 'home_control'
+};
+
+const record = {
+	data_id: ID,
 	co2: '11%',
 	temp: 23,
 	quality: 11.25,
 	reading_time: '2015-11-27T11:04:13.539Z',
-	metadata: {metadata_json: 'reekoh metadata json'},
+	metadata: {
+		metadata_json: 'reekoh metadata json'
+	},
+	list: ['value1', 'value1', 'value2'],
+	set: ['value1', 'value2'],
 	random_data: 'abcdefg',
 	is_normal: true
 };
@@ -40,7 +86,7 @@ describe('Storage', function () {
 
 	describe('#spawn', function () {
 		it('should spawn a child process', function () {
-			assert.ok(storage = cp.fork(process.cwd()), 'Child process not spawned.');
+			should.ok(storage = cp.fork(process.cwd()), 'Child process not spawned.');
 		});
 	});
 
@@ -58,74 +104,82 @@ describe('Storage', function () {
 				data: {
 					options: {
 						host: HOST,
+						port: PORT,
 						user: USER,
 						password: PASSWORD,
 						keyspace: KEYSPACE,
-						table: TABLE,
-						port: PORT,
-						fields: JSON.stringify({
-							id: {source_field: 'id', data_type: 'Integer'},
-							co2_field: {source_field: 'co2', data_type: 'String'},
-							temp_field: {source_field: 'temp', data_type: 'Integer'},
-							quality_field: {source_field: 'quality', data_type: 'Float'},
-							reading_time_field: {
-								source_field: 'reading_time',
-								data_type: 'DateTime',
-								format: 'YYYY-MM-DDTHH:mm:ss.SSSSZ'
-							},
-							metadata_field: {source_field: 'metadata', data_type: 'JSON'},
-							random_data_field: {source_field: 'random_data'},
-							is_normal_field: {source_field: 'is_normal', data_type: 'Boolean'}
-						})
+						replication_config: JSON.stringify(REPLICATION_CONFIG),
+						schema: JSON.stringify(SCHEMA)
 					}
 				}
 			}, function (error) {
-				assert.ifError(error);
+				should.ifError(error);
 			});
 		});
 	});
 
 	describe('#data', function () {
 		it('should process the data', function (done) {
+			this.timeout(20000);
 
 			storage.send({
 				type: 'data',
 				data: record
-			}, done);
+			}, (error) => {
+				should.ifError(error);
 
+				setTimeout(done, 19000);
+			});
 		});
 	});
 
 	describe('#data', function () {
 		it('should have inserted the data', function (done) {
 			this.timeout(20000);
+			let Cassandra = require('express-cassandra');
 
-			var cassandra = require('cassandra-driver');
-
-			var authProvider = new cassandra.auth.PlainTextAuthProvider(USER, PASSWORD);
-
-			var client = new cassandra.Client({
-				contactPoints: [HOST],
-				authProvider: authProvider,
-				keyspace: KEYSPACE,
-				protocolOptions: {port: PORT}
+			var cassandra = Cassandra.createClient({
+				clientOptions: {
+					contactPoints: `${HOST}`.replace(/\s/g, '').split(','),
+					keyspace: KEYSPACE,
+					protocolOptions: {
+						port: PORT
+					},
+					authProvider: new Cassandra.driver.auth.PlainTextAuthProvider(USER, PASSWORD),
+					queryOptions: {
+						consistency: Cassandra.consistencies.one
+					}
+				},
+				ormOptions: {
+					defaultReplicationStrategy: Object.assign({
+						class: 'NetworkTopologyStrategy'
+					}, REPLICATION_CONFIG),
+					migration: 'safe',
+					createKeyspace: true
+				}
 			});
 
-			client.execute('select * from reekoh_table where id = ' + ID, function (error, response) {
+			cassandra.connect(function (connectionError) {
+				should.ifError(connectionError);
 
-				should.exist(response.rows[0]);
+				var Data = cassandra.loadSchema('Data', SCHEMA, function (modelError) {
+					should.ifError(modelError);
 
-				var resp = response.rows[0];
+					Data.findOne({data_id: cassandra.datatypes.Long.fromString(`${ID}`)}, {allow_filtering: true}, function (findError, data) {
+						should.ifError(findError);
+						should.exist(data);
 
-				should.equal(record.co2, resp.co2_field, 'Data validation failed. Field: co2');
-				should.equal(record.temp, resp.temp_field, 'Data validation failed. Field: temp');
-				should.equal(record.quality, resp.quality_field, 'Data validation failed. Field: quality');
-				should.equal(record.random_data, resp.random_data_field, 'Data validation failed. Field: random_data');
-				should.equal(moment(record.reading_time).format('YYYY-MM-DDTHH:mm:ss.SSSSZ'),
-					moment(resp.reading_time_field).format('YYYY-MM-DDTHH:mm:ss.SSSSZ'), 'Data validation failed. Field: reading_time');
-				should.equal(JSON.stringify(record.metadata), JSON.stringify(resp.metadata_field), 'Data validation failed. Field: metadata');
-				should.equal(record.is_normal, resp.is_normal_field, 'Data validation failed. Field: is_normal');
-				done();
+						should.equal(record.co2, data.co2, 'Data validation failed. Field: co2');
+						should.equal(record.temp, data.temp, 'Data validation failed. Field: temp');
+						should.equal(record.quality, data.quality, 'Data validation failed. Field: quality');
+						should.equal(record.random_data, data.random_data, 'Data validation failed. Field: random_data');
+						should.equal(moment(record.reading_time).format('YYYY-MM-DDTHH:mm:ss.SSSSZ'),
+							moment(data.reading_time).format('YYYY-MM-DDTHH:mm:ss.SSSSZ'), 'Data validation failed. Field: reading_time');
+						should.equal(JSON.stringify(record.metadata), JSON.stringify(data.metadata), 'Data validation failed. Field: metadata');
+						should.equal(record.is_normal, data.is_normal, 'Data validation failed. Field: is_normal');
+						done();
+					});
+				});
 			});
 		});
 	});

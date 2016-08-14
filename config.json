@@ -3,42 +3,48 @@
 	"label": "Host",
 	"type": "String",
 	"required": true,
-	"help": "Host(s) for the Cassandra database. Values can be multiple separated by comma."
+	"help": "Host(s) to be used for connection. Multiple hosts (cluster) can be specified separated by comma."
   },
   "port": {
 	"label": "Port",
 	"type": "Number",
 	"required": false,
-	"help": "(Optional) Port for the Cassandra database."
+	"help": "(Optional) Port to be used for connection. Default: 9042"
   },
   "user" : {
 	"label": "User",
 	"type": "String",
-	"required": true,
-	"help": "User for authentication."
+	"required": false,
+	"help": "(Optional) Username to use for authentication."
   },
   "password" : {
 	"label": "Password",
 	"type": "Password",
 	"required": false,
-	"help": "(Optional) Password for authentication."
+	"help": "(Optional) Password to use for authentication."
   },
   "keyspace": {
 	"label": "Keyspace",
 	"type": "String",
 	"required": true,
-	"help": "Name of the Keyspace where the Table is located in Cassandra."
+	"help": "Name keyspace to use."
   },
-  "table": {
-	"label": "Table",
-	"type": "String",
-	"required": true,
-	"help": "Name of the Table in the Cassandra Keyspace specified and data will be written into."
-  },
-  "field_mapping": {
-	"label": "Field Mapping",
+  "schema": {
+	"label": "Schema",
 	"type": "JSON",
 	"required": true,
-	"help": "Data will be inserted as is if this is blank. List of the Table Fields/Columns. Input for this field is in JSON format {\"(field_name)\" : {\"source_field\" : \"value\", \"data_type\": \"value\", \"format\": \"value\"}}. field_name will be the name of the column in the Cassandra Table, source_field (required) value will be the name of the field in the JSON Data passed to the plugin, data_type (optional) there are 6 available data types that will convert data to it's proper type before saving. Valid data types are String, Integer, Float, Boolean, Timestamp, Map and Set leaving this blank will just use the current data for the field, format is only available for Timestamp data type allowing users to specify the format of the device date/time data value. Kindly refer to the MomentJS docs for more details (http://momentjs.com/docs/#/parsing/string-format/)."
+	"help": "Express Cassandra ORM table schema. Kindly refer to http://express-cassandra.readthedocs.io/en/latest/schema/ for more information."
+  },
+  "replication_factor": {
+	"label": "Replication Factor",
+	"type": "Number",
+	"required": false,
+	"help": "(Optional) Used for Simple Strategy Replication. Note: Won't be used when Replication Config is supplied. Default: 1"
+  },
+  "replication_config": {
+	"label": "Replication Config",
+	"type": "JSON",
+	"required": false,
+	"help": "(Optional) Used for Network Topology Strategy Replication. Should contain Data Center Names as field names and Number of Replicas as values. Example: {\"data_center1\": 3, \"data_center2\": 3}"
   }
 }

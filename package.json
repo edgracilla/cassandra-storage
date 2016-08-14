@@ -1,7 +1,7 @@
 {
-  "name": "cassandra-storage",
-  "description": "Cassandra storage plugin for Reekoh IoT Platform",
-  "version": "1.0.0",
+  "name": "cassandra3-storage",
+  "description": "Cassandra 3 storage plugin for Reekoh IoT Platform",
+  "version": "2.0.0",
   "author": "Reekoh, Inc.",
   "main": "app.js",
   "scripts": {
@@ -9,29 +9,30 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Reekoh/cassandra-storage"
+    "url": "https://github.com/Reekoh/cassandra3-storage"
   },
   "dependencies": {
     "async": "^1.5.2",
-    "cassandra-driver": "^3.0.2",
+    "express-cassandra": "^1.2.1",
+    "lodash.contains": "^2.4.3",
     "lodash.isarray": "^4.0.0",
-    "lodash.isboolean": "^3.0.3",
-    "lodash.isempty": "^4.2.1",
+    "lodash.isempty": "^4.4.0",
     "lodash.isnil": "^4.0.0",
     "lodash.isnumber": "^3.0.3",
-    "lodash.isplainobject": "^4.0.4",
+    "lodash.isplainobject": "^4.0.6",
     "lodash.isstring": "^4.0.1",
-    "moment": "^2.13.0"
+    "moment": "^2.14.1"
   },
   "devDependencies": {
     "gulp": "^3.9.1",
-    "gulp-cli": "^1.2.1",
-    "gulp-jshint": "^2.0.0",
+    "gulp-cli": "^1.2.2",
+    "gulp-jshint": "^2.0.1",
     "gulp-json-lint": "^0.1.0",
-    "gulp-mocha": "^2.2.0",
+    "gulp-mocha": "^3.0.1",
     "gulp-plumber": "^1.1.0",
-    "mocha": "^2.4.5",
-    "should": "^8.3.1"
+    "mocha": "^3.0.2",
+    "node-uuid": "^1.4.7",
+    "should": "^11.0.0"
   },
   "license": "LGPL-3.0"
 }
